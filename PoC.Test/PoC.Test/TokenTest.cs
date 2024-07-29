@@ -10,6 +10,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Xml.Linq;
+using System.Net.Http.Headers;
 
 namespace PoC.Test
 {
@@ -27,7 +29,22 @@ namespace PoC.Test
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var token = await GetSharepointToken();
+            var strFolderName = "TestFolder";
+            string endpointUrl = Environment.GetEnvironmentVariable("SharepointURL") + String.Format(
+                  "/_api/web/getfolderbyserverrelativeurl('{0}')/folders", strFolderName.Replace("'", "''"));
+
+            var AccessToken = await GetSharepointToken();
+
+            _client.DefaultRequestHeaders.Add("cache-control", "no-cache");
+            _client.DefaultRequestHeaders.Remove("authorization");
+            _client.DefaultRequestHeaders.Add("authorization", "Bearer" + " " + AccessToken);
+            _client.DefaultRequestHeaders.Add("Accept", "application/json; odata=verbose");
+            // replacing '' with ' to correct the folder name
+            string strContent = "{\"__metadata\": {\"type\": \"SP.Folder\" }, \"ServerRelativeUrl\": \"" + strFolderName.Replace("''", "'") + "\"}";
+            //StringContent body = new StringContent("{ '__metadata':{ 'type': 'SP.Folder' }, 'ServerRelativeUrl':'" + strFolderName + "' }");
+            StringContent body = new StringContent(strContent);
+            body.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json;odata=verbose");
+            var result = await _client.PostAsync(endpointUrl, body);
         }
 
         public async Task<string> GetSharepointToken()
@@ -51,7 +68,9 @@ namespace PoC.Test
             parameters.Add("resource", SharePointResource);
 
             var encodedContent = new FormUrlEncodedContent(parameters);
-            strAuthURL = Environment.GetEnvironmentVariable("SharepointAuthURL");
+            //strAuthURL = Environment.GetEnvironmentVariable("SharepointAuthURL");
+            //strAuthURL = "https://login.microsoftonline.com/db1e96a8-a3da-442a-930b-235cac24cd5c/oauth2/token ";
+            strAuthURL = "https://accounts.accesscontrol.windows.net/db1e96a8-a3da-442a-930b-235cac24cd5c/tokens/OAuth/2";
             //_logger.LogInformation("Calling Sharepoint Auth service to get token, URL is " + strAuthURL);
             var httpResponse = await _client.PostAsync(strAuthURL, encodedContent);
 
